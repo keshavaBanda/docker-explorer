@@ -1,0 +1,20 @@
+version : '3'
+services:
+# Admin app
+  web:
+    image: admin-app:v1.0
+    container_name: keshava_admin
+    restart: always
+    ports:
+      - 5000:80
+    volumes:
+      - ./admin:/usr/src/app/admin
+#  Customer app
+  customer:
+    image: customer-app:v1.1
+    container_name: customer_keshava
+    restart: always
+    ports:
+      - 4201:80
+    volumes:
+      - ./customer:/usr/src/app/customer

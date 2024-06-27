@@ -1,0 +1,233 @@
+---
+version: '3.8'
+services:
+
+##########################################################################
+## LAST EDITED 15-01-2024
+##########################################################################
+
+##########################################
+# UBUNTU SCRIPT
+#########################################
+  ftp_helper:
+    image: ubuntu:22.04
+    container_name: ftp_helper
+    volumes:
+      - /home/superdoge/mega/ftp-bridge:/data
+    command: /bin/bash -c "./data/ftp-insert.sh"
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "ps aux | grep ftp-insert.sh  | grep -v grep | awk '{print $2}'"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    restart: always
+    networks:
+      - mega_be
+
+##########################################
+# OBJECT STORAGE
+#########################################
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-01-11T07-46-16Z
+    container_name: minio
+    ports:
+      - 9000:9000
+      - 9090:9090
+      - 8021:8021
+    networks:
+      - mega_be
+    environment:
+      MINIO_ROOT_USER: superman
+      MINIO_ROOT_PASSWORD: evvo_remote_65
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c" , "mc ready local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - /mnt/photos/data:/data
+    command: server /data --console-address ":9090" --ftp="address=:8021"
+    restart: always
+
+##########################################
+# NGINX WEB REVERSE PROXY
+#########################################
+
+  nginx-lb:
+    container_name: nginx-lb
+    image: nginx:1.25.3
+    volumes:
+      - /home/superdoge/mega/nginx/nginx-lb/conf:/etc/nginx:ro
+      - /home/superdoge/mega-project-images/Excel_Reports:/home
+      - /home/superdoge/mega-project-images/Mega_Profile_Images:/usr/megaimages
+    healthcheck:
+      test: ["CMD", "service", "nginx", "status"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: always
+    networks:
+      - mega_be
+      - mega_fe
+
+
+####################################################
+# DATABASE
+###################################################
+  db:
+    image: mysql:8.2.0
+    container_name: mysql_instance
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: jupiterplanet12
+    ports:
+      - 3306:3306
+    networks:
+      - mega_db
+    volumes:
+      - /home/superdoge/mega/mysql/_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+####################################################
+# MEGA CORE API
+####################################################
+  api:
+    image: mega_apis:v50
+    container_name: mega_apis
+    restart: always
+    env_file:
+      - .env.dev.mega
+    ports:
+      - 5007:5007
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f" , "-X", "GET" , "http://localhost:5007/api/Test/ApiConnection"]
+      interval: 20s
+      timeout: 20s
+      retries: 3
+    volumes:
+      - /home/superdoge/mega-project-images/mega_logs/mega-api/:/mega_api_logs/
+      - /home/superdoge/mega-project-images/Excel_Reports/:/MegaEventReports/
+      - /home/superdoge/mega-project-images/Mega_Profile_Images/:/MegaEventImages/
+    networks:
+      - mega_be
+      - mega_db
+
+#################################################
+# MEGA GET QR DATA SERVICE
+################################################
+  tcp:
+    image: tcpservice:v15
+    container_name: tcpservice
+    restart: always
+    env_file:
+      - .env.dev.mega
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", " /scripts/tcp-service-healthcheck.sh | grep ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    ports:
+      - 5009:5009
+    volumes:
+      - /home/superdoge/mega-project-images/mega_logs/tcp_listener/:/mega_tcp_logs/
+      - /home/superdoge/mega/mega-scripts/tcpservice/:/scripts
+    networks:
+      - mega_be
+      - mega_db
+
+#############################################
+# MEGA ADMIN FRONTEND
+############################################
+  web:
+    image: mega_web_admin:v29
+    container_name: megawebadmin
+    restart: always
+    env_file:
+      - .env.dev.mega
+    ports:
+      - 5008:80
+    healthcheck:
+      test: ["CMD", "curl", "localhost"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    networks:
+      - mega_be
+#      - mega_fe
+
+#############################################
+# MEGA ONLINE GALLERY
+############################################
+  gallery:
+    image: mega_online_gallery:v21
+    container_name: mega_online_gallery
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "localhost"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    env_file:
+      - .env.dev.mega
+    ports:
+      - 5010:80
+    networks:
+      - mega_be
+
+#############################################
+# MEGA DIGITAL SIGNAGE
+#############################################
+  signage:
+   image: digital_signage:v11
+   container_name: digital_signage
+   restart: always
+   healthcheck:
+      test: ["CMD", "curl", "localhost"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+   env_file:
+    - .env.dev.mega
+   ports:
+    -  5011:80
+   networks:
+    - mega_be
+
+#############################################
+# METABASE
+############################################
+  metabase:
+    image: metabase/metabase
+    container_name: metabase
+    restart: always
+    ports:
+      - 3333:3000
+#    healthcheck:
+#      test: ["CMD", "curl", "localhost"]
+#      interval: 10s
+#      timeout: 10s
+#      retries: 3
+    networks:
+      - mega_be
+#      - mega_fe
+
+
+#############################################
+# NETWORKS
+############################################
+networks:
+  mega_fe:
+  mega_be:
+  mega_db:

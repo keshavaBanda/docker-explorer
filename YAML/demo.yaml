@@ -1,0 +1,12 @@
+microservices:
+  - app: user-auth
+    port: 9000
+    version: 1.7
+  - app: admin-auth
+    port: 9001
+    version: [1.8, 1.9, 2.0]
+
+
+
+
+  
